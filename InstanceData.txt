@@ -1,0 +1,9 @@
+ImageId: ami-0077240ab26e235e5
+InstanceType: "t2.micro"
+NetworkInterfaces:
+        - GroupSet:
+            - !Ref BackspaceEC2SG
+          AssociatePublicIpAddress: 'true'
+          DeviceIndex: '0'
+          DeleteOnTermination: 'true'
+          SubnetId: !Ref PublicSubnet

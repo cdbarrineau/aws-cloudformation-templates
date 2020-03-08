@@ -13,7 +13,7 @@ Metadata:
         - 2c1045e9-5b22-4274-9f80-746962194c31
     2c1045e9-5b22-4274-9f80-746962194c31:
       size:
-        width: 580
+        width: 720
         height: 270
       position:
         x: -540
@@ -21,8 +21,13 @@ Metadata:
       z: 1
       parent: e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
       embeds:
+        - d80a2902-8f70-45de-bd59-960105444074
         - da2e91e6-ab0e-40a0-9ee6-d15002860361
       iscontainedinside:
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
         - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
         - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
         - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
@@ -67,12 +72,6 @@ Metadata:
       target:
         id: 2c1045e9-5b22-4274-9f80-746962194c31
       z: 2
-    4b88192e-4a14-4f99-b893-cea9fa066ad9:
-      source:
-        id: da2e91e6-ab0e-40a0-9ee6-d15002860361
-      target:
-        id: e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
-      z: 5
     b5292828-81c6-456f-88cf-5f8217beb4a3:
       size:
         width: 60
@@ -88,19 +87,29 @@ Metadata:
       iscontainedinside:
         - da2e91e6-ab0e-40a0-9ee6-d15002860361
         - da2e91e6-ab0e-40a0-9ee6-d15002860361
+        - da2e91e6-ab0e-40a0-9ee6-d15002860361
+        - da2e91e6-ab0e-40a0-9ee6-d15002860361
+        - da2e91e6-ab0e-40a0-9ee6-d15002860361
+        - da2e91e6-ab0e-40a0-9ee6-d15002860361
       dependson:
         - fd3e121a-af20-4b14-9d46-2b1ca9afaba3
-    6d388311-900f-4263-932a-63cea6966e62:
+    d80a2902-8f70-45de-bd59-960105444074:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 20
+        'y': 530
+      z: 2
+      parent: 2c1045e9-5b22-4274-9f80-746962194c31
+      embeds: []
+      iscontainedinside:
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+    84631774-8e00-4dda-89d6-02ae73b22c3b:
       source:
-        id: b5292828-81c6-456f-88cf-5f8217beb4a3
+        id: d80a2902-8f70-45de-bd59-960105444074
       target:
-        id: fd3e121a-af20-4b14-9d46-2b1ca9afaba3
-      z: 4
-    f5ac7ad2-a4d8-4f37-8581-de59bbce0e2b:
-      source:
-        id: b5292828-81c6-456f-88cf-5f8217beb4a3
-      target:
-        id: edd4da24-db3c-4594-ab70-424f59d04ce3
+        id: e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
       z: 5
 Resources:
   EC2VPC:
@@ -161,3 +170,20 @@ Resources:
         id: b5292828-81c6-456f-88cf-5f8217beb4a3
     DependsOn:
       - EC2VPCG229RA
+  EC2SG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Allow access from HTTP and SSH traffic
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref EC2VPC
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: d80a2902-8f70-45de-bd59-960105444074
