@@ -1,0 +1,163 @@
+AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  'AWS::CloudFormation::Designer':
+    e314d8ca-1778-453a-a9c3-8cdc4d0cbe17:
+      size:
+        width: 800
+        height: 350
+      position:
+        x: -570
+        'y': 410
+      z: 0
+      embeds:
+        - 2c1045e9-5b22-4274-9f80-746962194c31
+    2c1045e9-5b22-4274-9f80-746962194c31:
+      size:
+        width: 580
+        height: 270
+      position:
+        x: -540
+        'y': 460
+      z: 1
+      parent: e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+      embeds:
+        - da2e91e6-ab0e-40a0-9ee6-d15002860361
+      iscontainedinside:
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+    edd4da24-db3c-4594-ab70-424f59d04ce3:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -380
+        'y': 310
+      z: 0
+      embeds: []
+    fd3e121a-af20-4b14-9d46-2b1ca9afaba3:
+      source:
+        id: e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+      target:
+        id: edd4da24-db3c-4594-ab70-424f59d04ce3
+      z: 0
+    da2e91e6-ab0e-40a0-9ee6-d15002860361:
+      size:
+        width: 140
+        height: 140
+      position:
+        x: -190
+        'y': 520
+      z: 2
+      parent: 2c1045e9-5b22-4274-9f80-746962194c31
+      embeds:
+        - b5292828-81c6-456f-88cf-5f8217beb4a3
+      iscontainedinside:
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+    fe2fca1b-dd75-4934-8ec3-e5728b7da550:
+      source:
+        id: da2e91e6-ab0e-40a0-9ee6-d15002860361
+      target:
+        id: 2c1045e9-5b22-4274-9f80-746962194c31
+      z: 2
+    4b88192e-4a14-4f99-b893-cea9fa066ad9:
+      source:
+        id: da2e91e6-ab0e-40a0-9ee6-d15002860361
+      target:
+        id: e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+      z: 5
+    b5292828-81c6-456f-88cf-5f8217beb4a3:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -150
+        'y': 570
+      z: 3
+      parent: da2e91e6-ab0e-40a0-9ee6-d15002860361
+      embeds: []
+      isassociatedwith:
+        - edd4da24-db3c-4594-ab70-424f59d04ce3
+      iscontainedinside:
+        - da2e91e6-ab0e-40a0-9ee6-d15002860361
+        - da2e91e6-ab0e-40a0-9ee6-d15002860361
+      dependson:
+        - fd3e121a-af20-4b14-9d46-2b1ca9afaba3
+    6d388311-900f-4263-932a-63cea6966e62:
+      source:
+        id: b5292828-81c6-456f-88cf-5f8217beb4a3
+      target:
+        id: fd3e121a-af20-4b14-9d46-2b1ca9afaba3
+      z: 4
+    f5ac7ad2-a4d8-4f37-8581-de59bbce0e2b:
+      source:
+        id: b5292828-81c6-456f-88cf-5f8217beb4a3
+      target:
+        id: edd4da24-db3c-4594-ab70-424f59d04ce3
+      z: 5
+Resources:
+  EC2VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+  PublicSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref EC2VPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: us-east-1a
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 2c1045e9-5b22-4274-9f80-746962194c31
+  EC2VPCG229RA:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId: !Ref EC2IG
+      VpcId: !Ref EC2VPC
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: fd3e121a-af20-4b14-9d46-2b1ca9afaba3
+  EC2IG:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties: {}
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: edd4da24-db3c-4594-ab70-424f59d04ce3
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref EC2VPC
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: da2e91e6-ab0e-40a0-9ee6-d15002860361
+  EC2SRTA19H9X:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref PublicSubnet
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: fe2fca1b-dd75-4934-8ec3-e5728b7da550
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      GatewayId: !Ref EC2IG
+      DestinationCidrBlock: 0.0.0.0/0
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: b5292828-81c6-456f-88cf-5f8217beb4a3
+    DependsOn:
+      - EC2VPCG229RA
