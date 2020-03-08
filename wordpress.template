@@ -23,7 +23,12 @@ Metadata:
       embeds:
         - d80a2902-8f70-45de-bd59-960105444074
         - da2e91e6-ab0e-40a0-9ee6-d15002860361
+        - 7b3d3256-fd8d-4c96-a667-4c085bf4551f
       iscontainedinside:
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
+        - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
         - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
         - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
         - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
@@ -91,6 +96,10 @@ Metadata:
         - da2e91e6-ab0e-40a0-9ee6-d15002860361
         - da2e91e6-ab0e-40a0-9ee6-d15002860361
         - da2e91e6-ab0e-40a0-9ee6-d15002860361
+        - da2e91e6-ab0e-40a0-9ee6-d15002860361
+        - da2e91e6-ab0e-40a0-9ee6-d15002860361
+        - da2e91e6-ab0e-40a0-9ee6-d15002860361
+        - da2e91e6-ab0e-40a0-9ee6-d15002860361
       dependson:
         - fd3e121a-af20-4b14-9d46-2b1ca9afaba3
     d80a2902-8f70-45de-bd59-960105444074:
@@ -105,12 +114,23 @@ Metadata:
       embeds: []
       iscontainedinside:
         - e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
-    84631774-8e00-4dda-89d6-02ae73b22c3b:
-      source:
-        id: d80a2902-8f70-45de-bd59-960105444074
-      target:
-        id: e314d8ca-1778-453a-a9c3-8cdc4d0cbe17
-      z: 5
+    7b3d3256-fd8d-4c96-a667-4c085bf4551f:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -450
+        'y': 540
+      z: 2
+      parent: 2c1045e9-5b22-4274-9f80-746962194c31
+      embeds: []
+      iscontainedinside:
+        - 2c1045e9-5b22-4274-9f80-746962194c31
+        - 2c1045e9-5b22-4274-9f80-746962194c31
+        - 2c1045e9-5b22-4274-9f80-746962194c31
+        - 2c1045e9-5b22-4274-9f80-746962194c31
+      dependson:
+        - b5292828-81c6-456f-88cf-5f8217beb4a3
 Resources:
   EC2VPC:
     Type: 'AWS::EC2::VPC'
@@ -187,3 +207,20 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: d80a2902-8f70-45de-bd59-960105444074
+  EC2I3E5WH:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-0077240ab26e235e5
+      InstanceType: t2.micro
+      NetworkInterfaces:
+        - GroupSet:
+            - !Ref EC2SG
+          AssociatePublicIpAddress: 'true'
+          DeviceIndex: '0'
+          DeleteOnTermination: 'true'
+          SubnetId: !Ref PublicSubnet
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 7b3d3256-fd8d-4c96-a667-4c085bf4551f
+    DependsOn:
+      - PublicRoute
