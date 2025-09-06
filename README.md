@@ -2,6 +2,8 @@
 
 In order to use the templates you must have an AWS account.
 
+This is a collection of AWS CloudFormation templates I've collected over the years.  They range from simple to complex.
+
 ## Authors
 
 * **David Barrineau** - *Initial work* - [cdbarrineau](https://github.com/cdbarrineau)
