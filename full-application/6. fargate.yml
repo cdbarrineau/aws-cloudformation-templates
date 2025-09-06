@@ -1,0 +1,394 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploy a service on AWS Fargate, hosted in a private subnet, but
+  accessible via a public load balancer.
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Environment
+        Parameters:
+          - EnvironmentName
+    ParameterLabels:
+      EnvironmentName:
+        default: The environment to use
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: Development
+    AllowedValues:
+      - Development
+      - Testing
+      - Production
+    Description: The type of environment to run in.
+  ServiceName:
+    Type: String
+    Default: TracrChainService
+    Description: A name for the service
+  ClusterName:
+    Type: String
+    Default: TracrChainCluster
+    Description: A name for the cluster
+  ImageUrl:
+    Type: String
+    Default: 425112775363.dkr.ecr.us-east-1.amazonaws.com/tracr-chain:latest
+    Description: The url of a docker image that contains the application process
+      that will handle the traffic for this service
+  ContainerPort:
+    Type: Number
+    Default: 80
+    Description: What port number the application inside the docker container is binding to
+  ContainerCpu:
+    Type: Number
+    Default: 256
+    Description: How much CPU to give the container. 1024 is 1 CPU
+  ContainerMemory:
+    Type: Number
+    Default: 512
+    Description: How much memory in megabytes to give the container
+  DesiredCount:
+    Type: Number
+    Default: 1
+    Description: How many copies of the service task to run
+Resources:
+  # A log group for storing the stdout logs from this service's containers
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub ${EnvironmentName}-service-${ServiceName}
+  # A security group for the containers we will run in Fargate.
+  # Rules are added to this security group based on what ingress you
+  # add for the cluster.
+  ContainerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the Fargate containers
+      VpcId: !ImportValue
+        Fn::Sub: ${EnvironmentName}:VpcId
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: 80
+          IpProtocol: tcp
+          ToPort: 80
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+        # FromPort: 0
+        # ToPort: 65535
+  TracrChainCluster:
+    Type: AWS::ECS::Cluster
+  # This is an IAM role which authorizes ECS to manage resources on your
+  # account on your behalf, such as updating your load balancer with the
+  # details of where your containers are, so that traffic can reach your
+  # containers.
+  ECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-task-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs.amazonaws.com
+                - ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: ecs-service-policy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Resource: '*'
+                Action:
+                  # Rules which allow ECS to attach network interfaces to instances
+                  # on your behalf in order for awsvpc networking mode to work right
+                  - ec2:AttachNetworkInterface
+                  - ec2:CreateNetworkInterface
+                  - ec2:CreateNetworkInterfacePermission
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DeleteNetworkInterfacePermission
+                  - ec2:Describe*
+                  - ec2:DetachNetworkInterface
+                  - ssm:GetParameters
+                  - ssm:DescribeParameters
+                  - ssm:GetParameters
+                  - ssm:GetParameter
+                  - rds-db:connect
+                  - kms:DescribeKey
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                  # Rules which allow ECS to update load balancers on your behalf
+                  # with the information about how to send traffic to your containers
+                  - elasticloadbalancing:DeregisterInstancesFromLoadBalancer
+                  - elasticloadbalancing:DeregisterTargets
+                  - elasticloadbalancing:Describe*
+                  - elasticloadbalancing:RegisterInstancesWithLoadBalancer
+                  - elasticloadbalancing:RegisterTargets
+
+  # This is a role which is used by the ECS tasks themselves.
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-task-execution-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs.amazonaws.com
+                - ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: ecs-task-execution-policy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Resource: '*'
+                Action:
+                  # Allow the ECS Tasks to download images from ECR
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  # Allow the ECS Tasks to read from the parameter store and to decrypt any encrypted data.
+                  - kms:DescribeKey
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                  - ssm:GetParameters
+                  - ssm:GetParameter
+                  - ssm:DescribeParameters
+                  # Connect to RDS.
+                  - rds-db:connect
+                  # Allow the ECS tasks to upload logs to CloudWatch
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:CreateLogGroup
+                  # - 'secretsmanager:GetSecretValue'
+                  # The task definition. This is a simple metadata description of what
+                  # container to run, and what resource requirements it has.
+  TaskDefinition:
+    DependsOn:
+      - ECSTaskExecutionRole
+      - ECSRole
+      - TracrChainCluster
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref ServiceName
+      Cpu: !Ref ContainerCpu
+      Memory: !Ref ContainerMemory
+      NetworkMode: awsvpc
+      RuntimePlatform:
+        CpuArchitecture: !Ref OSArchitecture
+        OperatingSystemFamily: LINUX
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: !Ref ServiceName
+          Cpu: !Ref ContainerCpu
+          Memory: !Ref ContainerMemory
+          Image: !Ref ImageUrl
+          Environment:
+            - Name: CurrentRegion
+              Value: !Ref AWS::Region
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub ${EnvironmentName}-service-${ServiceName}
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Ref TracrChainCluster
+              awslogs-create-group: 'true'
+  # The service. The service is a resource which allows you to run multiple
+  # copies of a type of task, and gather up their logs and metrics, as well
+  # as monitor the number of running tasks and replace any that have crashed
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - ECSTaskExecutionRole
+      - ECSRole
+      - TaskDefinition
+      - AutoscalingRoleFargate
+    Properties:
+      ServiceName: !Ref ServiceName
+      Cluster: !Ref TracrChainCluster
+      LaunchType: FARGATE
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 75
+      DesiredCount: !Ref DesiredCount
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          # AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref ContainerSecurityGroup
+          Subnets:
+            - !ImportValue
+              Fn::Sub: ${EnvironmentName}:PrivateSubnetOne
+            - !ImportValue
+              Fn::Sub: ${EnvironmentName}:PrivateSubnetTwo
+            - !ImportValue
+              Fn::Sub: ${EnvironmentName}:PrivateSubnetThree
+      TaskDefinition: !Ref TaskDefinition
+      LoadBalancers:
+        - ContainerName: !Ref ServiceName
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !ImportValue
+            Fn::Sub: ${EnvironmentName}:TargetGroup
+  # A role used to allow AWS Autoscaling to inspect stats and adjust scaleable targets
+  # on your AWS account
+  AutoscalingRoleFargate:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - application-autoscaling.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: service-autoscaling
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - application-autoscaling:*
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:PutMetricAlarm
+                  - ecs:DescribeServices
+                  - ecs:UpdateService
+                Resource: '*'
+  # Enable autoscaling for this service
+  ScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: Service
+    Properties:
+      ServiceNamespace: ecs
+      ScalableDimension: ecs:service:DesiredCount
+      ResourceId: !Join
+        - /
+        - - service
+          - !Ref TracrChainCluster
+          - !Ref ServiceName
+      MinCapacity: 1
+      MaxCapacity: 10
+      RoleARN: !GetAtt AutoscalingRoleFargate.Arn # Fn::ImportValue: !Sub ${EnvironmentName}:AutoscalingRole
+  # Create scaling policies for the service
+  ScaleDownPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: ScalableTarget
+    Properties:
+      PolicyName: !Join
+        - /
+        - - scale
+          - !Ref TracrChainCluster
+          - !Ref ServiceName
+          - down
+      PolicyType: StepScaling
+      ResourceId: !Join
+        - /
+        - - service
+          - !Ref TracrChainCluster
+          - !Ref ServiceName
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        StepAdjustments:
+          - MetricIntervalUpperBound: 0
+            ScalingAdjustment: -1
+        MetricAggregationType: Average
+        Cooldown: 60
+
+  ScaleUpPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: ScalableTarget
+    Properties:
+      PolicyName: !Join
+        - /
+        - - scale
+          - !Ref TracrChainCluster
+          - !Ref ServiceName
+          - up
+      PolicyType: StepScaling
+      ResourceId: !Join
+        - /
+        - - service
+          - !Ref TracrChainCluster
+          - !Ref ServiceName
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        StepAdjustments:
+          - MetricIntervalLowerBound: 0
+            MetricIntervalUpperBound: 15
+            ScalingAdjustment: 1
+          - MetricIntervalLowerBound: 15
+            MetricIntervalUpperBound: 25
+            ScalingAdjustment: 2
+          - MetricIntervalLowerBound: 25
+            ScalingAdjustment: 3
+        MetricAggregationType: Average
+        Cooldown: 60
+
+  # Create alarms to trigger these policies
+  LowCpuUsageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Join
+        - '-'
+        - - low-cpu
+          - !Ref TracrChainCluster
+          - !Ref ServiceName
+      AlarmDescription: !Join
+        - ' '
+        - - Low CPU utilization for service
+          - !Ref ServiceName
+          - in environment
+          - !Ref EnvironmentName
+      MetricName: CPUUtilization
+      Namespace: AWS/ECS
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ServiceName
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 20
+      ComparisonOperator: LessThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref ScaleDownPolicy
+
+  HighCpuUsageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Join
+        - '-'
+        - - high-cpu
+          - !Ref TracrChainCluster
+          - !Ref ServiceName
+      AlarmDescription: !Join
+        - ' '
+        - - High CPU utilization for service
+          - !Ref ServiceName
+          - in environment
+          - !Ref EnvironmentName
+      MetricName: CPUUtilization
+      Namespace: AWS/ECS
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ServiceName
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 70
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref ScaleUpPolicy

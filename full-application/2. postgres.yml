@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Template for setting up a postgres database instance.
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "Environment"
+        Parameters: 
+          - EnvironmentName
+    ParameterLabels: 
+      EnvironmentName: 
+        default: The environment to use
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: Development
+    AllowedValues:
+      - Development
+      - Testing
+      - Production
+    Description: "The type of environment to run in."
+  DatabaseUser:
+    Type: String
+    Default: 'postgres'
+    Description: The DB user name to use.
+  DatabasePassword:
+    NoEcho: true
+    Type: String
+    Description: The DB password to use.
+  EngineVersion:
+    Type: String
+    Default: "13.7"
+    Description: Version of the database to use.
+Resources:
+  DBSubnetGroup:
+    Type: 'AWS::RDS::DBSubnetGroup'
+    Properties:
+      DBSubnetGroupDescription: !Ref 'AWS::StackName'
+      SubnetIds: 
+        - Fn::ImportValue: !Sub ${EnvironmentName}:PrivateSubnetOne
+        - Fn::ImportValue: !Sub ${EnvironmentName}:PrivateSubnetTwo
+        - Fn::ImportValue: !Sub ${EnvironmentName}:PrivateSubnetThree
+  BastionHostToPostgresSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvironmentName}-Bastion-PostgresSG
+      GroupDescription: Security Group for the bastion host to connect to the DB.
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}:VpcId
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: 3389
+          IpProtocol: tcp
+          ToPort: 3389
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+  PostgresSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvironmentName}-PostgresSG
+      GroupDescription: Security Group for the DB.
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}:VpcId
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          FromPort: 5432
+          IpProtocol: tcp
+          ToPort: 5432
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+  PostgresDatabase:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      VPCSecurityGroups:
+        - !Ref PostgresSG
+      PubliclyAccessible: true
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: true
+      AvailabilityZone: us-east-1a
+      DBName: tracr_chain_db
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      EnableCloudwatchLogsExports: 
+        - postgresql
+        - upgrade
+      EnablePerformanceInsights: true
+      EngineVersion: !Ref EngineVersion
+      MaxAllocatedStorage: "1000"
+      StorageEncrypted: true
+      Port: "5432"
+      AllocatedStorage: '200'
+      DBInstanceClass: db.t3.micro
+      Engine: postgres
+      MasterUsername: !Ref DatabaseUser
+      MasterUserPassword: !Ref DatabasePassword
+      DeletionProtection: false
+  DatabaseEndpointParameter:
+    DependsOn: PostgresDatabase
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /dbHost
+      Description: The DB endpoint.
+      Tier: Standard
+      Type: String
+      Value: !Sub ${PostgresDatabase.Endpoint.Address}
+  DatabasePasswordParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /dbPassword
+      Description: The DB user name.
+      Tier: Standard
+      Type: String
+      Value: !Ref DatabasePassword
+  DatabaseUserNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /dbUserName
+      Description: The DB user name.
+      Tier: Standard
+      Type: String
+      Value: !Ref DatabaseUser
+Outputs:
+  DatabaseEndpoint:
+    Description: The Endpoint of the postgres database
+    Value: !GetAtt PostgresDatabase.Endpoint.Address
+  DatabaseUser:
+    Description: The database user to talk with the database with.
+    Value: !Ref DatabaseUser

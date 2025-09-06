@@ -1,0 +1,183 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: TRACR Chain template for setting up Active MQ in Amazon MQ.
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "Environment"
+        Parameters: 
+          - EnvironmentName
+    ParameterLabels: 
+      EnvironmentName: 
+        default: The environment to use
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: Development
+    AllowedValues:
+      - Development
+      - Testing
+      - Production
+    Description: "The type of environment to run in."
+  AmazonMQBrokerMasterUser:
+    Type: String
+    Default: 'root'
+    Description: The master MQ Broker user name to use.
+  AmazonMQBrokerMasterPassword:
+    NoEcho: true
+    Type: String
+    Description: The master MQ Broker password to use.
+  AmazonMQBrokerUser:
+    Type: String
+    Default: 'tracrChain'
+    Description: The MQ Broker user name to use.
+  AmazonMQBrokerPassword:
+    NoEcho: true
+    Type: String
+    Description: The MQ Broker password to use.
+  DeploymentMode:
+    Type: String
+    Default: SINGLE_INSTANCE
+    AllowedValues:
+      - SINGLE_INSTANCE
+      - ACTIVE_STANDBY_MULTI_AZ
+      - CLUSTER_MULTI_AZ
+  InstanceType:
+    Type: String
+    Default: mq.t3.micro
+    AllowedValues:
+      - mq.t2.mirco
+      - mq.t3.micro
+      - mq.m4.large
+      - mq.t5.large
+      - mq.t5.xlarge
+      - mq.m5.2xlarge
+      - mq.m5.4large
+Conditions:
+  SingleInstance: !Equals [!Ref DeploymentMode, SINGLE_INSTANCE]
+  ActiveStandby: !Equals [!Ref DeploymentMode, ACTIVE_STANDBY_MULTI_AZ]
+  Clustered: !Equals [!Ref DeploymentMode, CLUSTER_MULTI_AZ]
+Resources:
+  AmazonMQSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Limits security group ingress and egress traffic for the Amazon MQ instance
+        VpcId: 
+          Fn::ImportValue: !Sub ${EnvironmentName}:VpcId
+        SecurityGroupIngress:
+            # OpenWire protocal
+          - IpProtocol: tcp
+            FromPort: 61617
+            ToPort: 61617
+            CidrIp: 0.0.0.0/0
+            # Websocket protocol
+          - IpProtocol: tcp
+            FromPort: 61619
+            ToPort: 61619
+            CidrIp: 0.0.0.0/0
+            # Console Access.
+          - IpProtocol: tcp
+            FromPort: 8162
+            ToPort: 8162
+            CidrIp: 0.0.0.0/0
+  AmazonMQBroker:
+    Type: AWS::AmazonMQ::Broker
+    Properties:
+      AutoMinorVersionUpgrade: true
+      BrokerName: TRACRChainActiveMQBroker
+      PubliclyAccessible: true
+      EngineType: ActiveMQ
+      EngineVersion: 5.17.1
+      HostInstanceType: !Ref 'InstanceType'
+      DeploymentMode: !Ref 'DeploymentMode'
+      AutoMinorVersionUpgrade: false
+      SecurityGroups:
+        - !Ref 'AmazonMQSecurityGroup'
+      SubnetIds:
+        - !If
+          - SingleInstance
+          - Fn::ImportValue: !Sub ${EnvironmentName}:PublicSubnetOne
+          - !Ref 'AWS::NoValue'
+        - !If
+          - ActiveStandby
+          - Fn::ImportValue: !Sub ${EnvironmentName}:PublicSubnetOne
+            Fn::ImportValue: !Sub ${EnvironmentName}:PublicSubnetTwo
+          - !Ref 'AWS::NoValue'
+        - !If
+          - Clustered
+          - Fn::ImportValue: !Sub ${EnvironmentName}:PublicSubnetOne
+            Fn::ImportValue: !Sub ${EnvironmentName}:PublicSubnetTwo
+          - !Ref 'AWS::NoValue'
+      Logs:
+        Audit: true
+        General: true
+      Users:
+        - ConsoleAccess: true
+          Groups:
+            - admins
+          Username: !Ref 'AmazonMQBrokerMasterUser'
+          Password: !Ref 'AmazonMQBrokerMasterPassword'
+        - ConsoleAccess: true
+          Groups:
+            - users
+          Username: !Ref 'AmazonMQBrokerUser'
+          Password: !Ref 'AmazonMQBrokerPassword'
+  MessageBrokerPasswordParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /mqPassword
+      Description: The Message Broker password
+      Tier: Standard
+      Type: String
+      Value: !Ref AmazonMQBrokerPassword
+  MessageBrokerUserNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /mqUserName
+      Description: The Message Broker username.
+      Tier: Standard
+      Type: String
+      Value: !Ref AmazonMQBrokerUser
+  MessageBrokerURIParameter:
+    DependsOn: AmazonMQBroker
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /mqUri
+      Description: The Message Broker MQTT URI.
+      Tier: Standard
+      Type: String
+      Value: !Sub '${AmazonMQBroker}-1.mq.${AWS::Region}.amazonaws.com'
+  MessageBrokerTopicParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /mqTopicName
+      Description: The Message Broker queue to subscribe to.
+      Tier: Standard
+      Type: String
+      Value: 'TracrChainTopic'
+Outputs:
+  AmazonMQBroker:
+    Description: The URI of the MQTT endpoint to connect to.
+    Value: !Sub '${AmazonMQBroker}-1.mq.${AWS::Region}.amazonaws.com'
+    Export:
+      Name: !Sub ${EnvironmentName}:AmazonMQBroker
+  
+
+
+  # MQBrokerUserPasswordSecret:
+  #   Type: 'AWS::SecretsManager::Secret'
+  #   Properties:
+  #     Name: MQBrokerUserAndPasswordSecret
+  #     Description: "Secret for accessing a queue on the ActiveMQ broker."
+  #     SecretString: !Join
+  #       - ''
+  #       - - '{'
+  #         - '"username"'
+  #         - ':'
+  #         - !Ref 'AmazonMQBrokerUser'
+  #         - ','
+  #         - '"password"'
+  #         - ':'
+  #         - !Ref 'AmazonMQBrokerPassword'
+  #         - '}'

@@ -1,0 +1,169 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Internal, internal load balancer, for forwarding web server traffic to containers
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      - 
+        Label: 
+          default: "Environment"
+        Parameters: 
+          - EnvironmentName
+    ParameterLabels: 
+      EnvironmentName: 
+        default: The environment to use
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: Development
+    AllowedValues:
+      - Development
+      - Testing
+      - Production
+    Description: "The type of environment to run in."
+Resources:
+  # # A role used to allow AWS Autoscaling to inspect stats and adjust scaleable targets
+  # # on your AWS account
+  # AutoscalingRoleFargate:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Statement:
+  #       - Effect: Allow
+  #         Principal:
+  #           Service: [application-autoscaling.amazonaws.com]
+  #         Action: ['sts:AssumeRole']
+  #     Path: /
+  #     Policies:
+  #     - PolicyName: service-autoscaling
+  #       PolicyDocument:
+  #         Statement:
+  #         - Effect: Allow
+  #           Action:
+  #             - 'application-autoscaling:*'
+  #             - 'cloudwatch:DescribeAlarms'
+  #             - 'cloudwatch:PutMetricAlarm'
+  #             - 'ecs:DescribeServices'
+  #             - 'ecs:UpdateService'
+  #           Resource: '*'
+
+  # Private load balancer, hosted in private subnets that is accessible
+  # to the web services, and is intended to route traffic to one or more private
+  # facing services. This is used for accepting traffic from the private network
+  # directing it to private facing microservices
+  PrivateLoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the private facing load balancer
+      GroupName: Private ALB
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}:VpcId
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0  PublicLoadBalancerSecurityGroup
+          FromPort: 0
+          IpProtocol: tcp
+          ToPort: 65535
+          GroupId: !Ref PublicLoadBalancerSecurityGroup
+          SourceSecurityGroupId: !Ref PublicLoadBalancerSecurityGroup
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+  PrivateLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internal
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '120'
+      - Key: access_logs.s3.enabled
+        Value: true
+      - Key: access_logs.s3.bucket
+        Value: access-logs-alb-phx-defense
+      # - Key: access_logs.s3
+      #   Value: 'ALB'
+      Subnets:
+        # The load balancer is placed into the public subnets, so that traffic
+        # from the internet can reach the load balancer directly via the internet gateway
+        - Fn::ImportValue: !Sub ${EnvironmentName}:PrivateSubnetOne
+        - Fn::ImportValue: !Sub ${EnvironmentName}:PrivateSubnetTwo
+        - Fn::ImportValue: !Sub ${EnvironmentName}:PrivateubnetThree
+      SecurityGroups: [!Ref 'PrivateLoadBalancerSG']
+  # Target Group that the ALB will use to communicate with the Container.
+  TargetGroupPrivate:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: Private-ALB-ECS-target-group
+      HealthCheckIntervalSeconds: 125
+      HealthCheckPath: /health-check.html
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 110
+      HealthyThresholdCount: 2
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 300
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      TargetType: ip
+      VpcId:
+        Fn::ImportValue: !Sub ${EnvironmentName}:VpcId
+  # Listener for the ALB.
+  PrivateLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn: PrivateLoadBalancer
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref 'TargetGroupPrivate'
+          Type: 'forward'
+      LoadBalancerArn: !Ref 'PrivateLoadBalancer'
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-2016-08
+  ALBExternalURLParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /privateALBURL
+      Description: The internal URL of the load balancer
+      Tier: Standard
+      Type: String
+      Value: !Sub https://${PublicLoadBalancer.DNSName}
+  
+  # Problem here is that coud formation does not clean up the record so we get an error
+  # saying there is alread an A record.  Therefore this needs to be a manual setting.
+  # LoadBalancerAlias:
+  #   DependsOn: PublicLoadBalancer
+  #   Type: AWS::Route53::RecordSet
+  #   Properties:
+  #     AliasTarget:
+  #       DNSName: !GetAtt PublicLoadBalancer.DNSName
+  #       HostedZoneId: !GetAtt PublicLoadBalancer.CanonicalHostedZoneID
+  #     HostedZoneName: tracr-chain.com.
+  #     Name: tracr-chain.com
+  #     Type: A
+Outputs:
+  PrivateLoadBalancerSecurityGroup:
+    Description: The security group from the ALB to the Containers.
+    Value: !Ref PrivateLoadBalancerSG
+    Export:
+      Name: !Sub ${EnvironmentName}:PrivateLoadBalancerSG
+  # AutoscalingRole:
+  #   Description: The ARN of the role used for autoscaling
+  #   Value: !GetAtt 'AutoscalingRoleFargate.Arn'
+  #   Export:
+  #     Name: !Sub ${EnvironmentName}:AutoscalingRoleFargate
+  PrivateListener:
+    Description: The ARN of the public load balancer's Listener
+    Value: !Ref PrivateLoadBalancerListener
+    Export:
+      Name: !Sub ${EnvironmentName}:PrivateListener
+  InternallUrl:
+    Description: The url of the internal load balancer
+    Value: !Sub https://${PrivateLoadBalancer.DNSName}
+    Export:
+      Name: !Sub ${EnvironmentName}:InternallUrl
+  TargetGroup:
+    Description: The ARN of the private load balancer's Target Group
+    Value: !Ref TargetGroupPrivate
+    Export:
+      Name: !Sub ${EnvironmentName}:TargetGroupPrivate
+
+
