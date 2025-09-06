@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description:  Rackspace VPC Template DB, APP and WEB Tiers
+Description:  VPC Template DB, APP and WEB Tiers
 Resources:
   VPC:
     Type: AWS::EC2::VPC
